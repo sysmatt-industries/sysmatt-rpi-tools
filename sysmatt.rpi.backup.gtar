@@ -22,4 +22,4 @@ DEST_DIR_SANITY=`dirname "${DFILE}"`
 # Run the tar archive
 tar --exclude="${DFILE}" --one-file-system -cvzf "${DFILE}" / /boot
 
-
+echo "Created archive: ${DFILE}"
