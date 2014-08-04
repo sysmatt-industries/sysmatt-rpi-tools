@@ -4,6 +4,7 @@
 SDCARD_DEVICE="${1:?You must specify one SD CARD DEVICE to destroy}"
 PI_BACKUP_SLASH="${2:?You must specify one PI BACKUP SLASH GTAR file}"
 
+# Temp random mountpoint under /tmp
 MOUNTPOINT="/tmp/pi.sd.${RANDOM}${$}"
 
 bomb (){
