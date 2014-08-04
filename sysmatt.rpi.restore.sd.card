@@ -1,0 +1,46 @@
+#!/bin/bash 
+# 20140804-1708 Matthew E Hoskins / Twitter: @sysmatt (c) GNU GPL
+
+SDCARD_DEVICE="${1:?You must specify one SD CARD DEVICE to destroy}"
+PI_BACKUP_SLASH="${2:?You must specify one PI BACKUP SLASH GTAR file}"
+
+MOUNTPOINT="/tmp/pi.sd.${RANDOM}${$}"
+
+bomb (){
+	echo "BOMB: ${1}"
+	exit 1
+}
+
+[ -x "/sbin/mkfs.vfat" ] || bomb "/sbin/mkfs.vfat Missing"
+
+echo ""
+echo "=== ${SDCARD_DEVICE} Current Partition Table - To be destroyed! ==="
+parted --script ${SDCARD_DEVICE} "print"
+echo ""
+read -p "PRESS ENTER to DESTROY ${SDCARD_DEVICE}, Press CTRL-c to abort" 
+
+parted --script "${SDCARD_DEVICE}"  "mklabel msdos"
+parted --script "${SDCARD_DEVICE}"  "mkpart primary fat16 1MiB 64MB"
+parted --script "${SDCARD_DEVICE}"  "mkpart primary ext4 64MB -1s"
+parted --script "${SDCARD_DEVICE}"  print
+mkfs.vfat  "${SDCARD_DEVICE}1"
+mkfs.ext4 -j "${SDCARD_DEVICE}2" 
+mkdir -p "${MOUNTPOINT}"
+mount "${SDCARD_DEVICE}2" "${MOUNTPOINT}"
+mkdir -p "${MOUNTPOINT}/boot"
+mount "${SDCARD_DEVICE}1" "${MOUNTPOINT}/boot"
+df -h "${MOUNTPOINT}"
+df -h "${MOUNTPOINT}/boot"
+read -p "Press ENTER To begin image restore"
+tar -xvzf  "${PI_BACKUP_SLASH}" -C "${MOUNTPOINT}"
+echo ""
+echo ""
+echo =DONE=
+echo "The SD is mounted at: ${MOUNTPOINT}"
+echo "Now would be a good time to make modifications in another shell session..."
+read -p "Press ENTER To unmount or CTRL-c to exit leaving mounted."
+set +x
+umount "${MOUNTPOINT}/boot"
+umount "${MOUNTPOINT}"
+
+
