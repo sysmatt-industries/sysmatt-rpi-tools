@@ -1,0 +1,444 @@
+<style>
+.highlight { background-color:yellow; color: black; }
+.typed     { text-decoration:underline; font-weight:bold; }
+</style>
+
+<p><a href="http://commons.wikimedia.org/wiki/File:Raspberry_Pi_B%2B_top.jpg#mediaviewer/File:Raspberry_Pi_B%2B_top.jpg"><img src="http://upload.wikimedia.org/wikipedia/commons/6/6f/Raspberry_Pi_B%2B_top.jpg" alt="Raspberry Pi B+ top.jpg" height="145" width="216"></a><br><small><small><small>Image Credit:"<a href="http://commons.wikimedia.org/wiki/File:Raspberry_Pi_B%2B_top.jpg#mediaviewer/File:Raspberry_Pi_B%2B_top.jpg"> Raspberry Pi B+ top</a>" by <a href="//commons.wikimedia.org/wiki/User:Lucasbosch" title="User:Lucasbosch">Lucasbosch</a> - <span class="int-own-work">Own work</span>. Licensed under <a href="http://creativecommons.org/licenses/by-sa/3.0" title="Creative Commons Attribution-Share Alike 3.0">CC BY-SA 3.0</a> via <a href="//commons.wikimedia.org/wiki/">Wikimedia Commons</small></small></small></a>.</p>
+
+<p>
+
+ <b>Ladies and gentlemen, if you are like me, you probably have a few raspberry pi.</b> (Piis?)  I have found them to be great little Linux development boards supported by a huge community.  Whenever I need a net connected microprocessor project, the pi is an easy win.  I have used it in internet connected clocks, LED signs, RGB lighting projects and so many other crazy projects.  They make a great internet gateway for Arduino projects. This use is the very definition of "embedded", a raspberry pi with no keyboard, mouse or monitor.  It boots, connects and does it's programmed task.  It would be a huge inconvenience to manually configure every one of these starting from a raspbian .img file.  Even if your not into electronics, manipulating the SD cards directly will make your life a little easier.<p>
+
+Now would be a great time to introduce my "day job".   I am a professional *NIX system administrator and system architect.  So when I see a raspberry pi I see a Linux box.  UNIX/Linux systems are very easy to clone, it's just a pile of files.  I will start with some basic theory and how to work with the SD card from the command line.  Then, I will introduce you to my scripts which automate the process.<p>
+<script async src="//pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- rpi-clone-embed1 -->
+<ins class="adsbygoogle"
+     style="display:inline-block;width:728px;height:90px"
+     data-ad-client="ca-pub-1453746380794860"
+     data-ad-slot="9199877230"></ins>
+<script>
+(adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<p>
+<h2>No Magic here</h2>
+
+Exactly how the raspberry pi boots is widely misunderstood.   And no wonder,  it's ummm, <a href="http://thekandyancode.wordpress.com/2013/09/21/how-the-raspberry-pi-boots-up/">complicated</a>.   In almost every computer architecture "bootstrap" is messy and complicated.  For the user though, the raspberry pi has kept it pretty simple, its just files on the SD.  Interface wise, the SD card looks like a disk.  Upon that disk are two partitions, a DOS (vfat) partition which contains almost everything necessary for booting, configuration, firmware, and kernel images.   Why FAT? Well, when constructing a bootstrap process, the name of the game is simplicity and small code size.  The DOS FAT filesystem is very simple compared to modern filesystems, it's also very well understood and pretty universal.   The "userland" part of the Linux operating system lives in the second partition which is usually ext4.  When the raspberry pi powers on, small chunks of firmware step by step load code into the GPU and CPU until it can eventually load the Linux kernel.  This finally makes the system smart enough to mount the slash "/" partition and do all the userland linuxy stuff.<p>
+
+So once we understand how it's using the SD card, we can duplicate it and pre-configure if before we even power it on.   No magic, It's all just regular files and some *NIX know-how.  <p>
+
+<h2>Basic Cloning</h2>
+
+The first use case we will explore cloning a running raspberry pi to a fresh SD card.  To make things easy, we will do all these steps on the actual raspberry pi.  You will need to have one free USB port and a USB SD card reader. We will do this step-by-step from the command line, this will give you a good idea how my scripts are constructed later.<p>
+Power on your Raspberry pi, and log in by whatever means you prefer (graphical, ssh, etc).  Get to a command prompt and sudo to a root shell, everything we are going to do needs root privilege.  You will also need to install the dosfstools package which is used later.   Then, plug in your SD card to any free USB port.  Use the "dmesg" utility to dump the kernel log, look at the output to determine what scsi device your new SD card has been assigned.  (stuff you type is <span class=typed>underlined</span>)<p>
+
+<table><TR><TD bgcolor=darkblue>
+<pre><code>
+pi$ <span class=typed>sudo su</span>
+root# <span class=typed>apt-get install dosfstools</span>
+root# <span class=typed>dmesg</span>
+[  147.590292] sd 0:0:0:0: Attached scsi generic sg0 type 0
+[  147.977885] sd 0:0:0:0: [sda] 15759360 512-byte logical blocks: (8.06 GB/7.51 GiB)
+[  147.978590] sd 0:0:0:0: [sda] Write Protect is off
+[  147.978623] sd 0:0:0:0: [sda] Mode Sense: 03 00 00 00
+[  147.979287] sd 0:0:0:0: [sda] No Caching mode page found
+[  147.979314] sd 0:0:0:0: [sda] Assuming drive cache: write through
+[  147.982973] sd 0:0:0:0: [sda] No Caching mode page found
+[  147.983007] sd 0:0:0:0: [sda] Assuming drive cache: write through
+[  147.986412]  <span class=highlight>sda</span>: sda1 sda2
+[  147.990030] sd 0:0:0:0: [sda] No Caching mode page found
+[  147.990064] sd 0:0:0:0: [sda] Assuming drive cache: write through
+[  147.990089] sd 0:0:0:0: [sda] Attached SCSI removable disk
+</code></pre><p>
+</TD></TR></TABLE><p>
+From the above, we can see that our SD card has been assigned "sda" which means /dev/sda is how we will get to it.<p>
+
+First, we need to create the two partitions to hold our /boot and / (slash) filesystems.  We do this with the GNU parted utility.<p>
+
+<table><TR><TD bgcolor=darkblue><pre><code>
+root# <span class=typed>parted /dev/sda</span>
+GNU Parted 2.3
+Using /dev/sda
+Welcome to GNU Parted! Type 'help' to view a list of commands.
+(parted) <span class=typed>mklabel msdos</span>
+Warning: The existing disk label on /dev/sda will be destroyed and all data on this disk will be lost. Do you want to continue?
+Yes/No? <span class=typed>y</span>
+(parted) <span class=typed>mkpart primary fat16 1MiB 64MB</span>
+(parted) <span class=typed>mkpart primary ext4 64MB -1s</span>
+(parted) <span class=typed>print</span>
+Model: Single Flash Reader (scsi)
+Disk /dev/sda: 8069MB
+Sector size (logical/physical): 512B/512B
+Partition Table: msdos
+
+Number  Start   End     Size    Type     File system  Flags
+ 1      1049kB  64.0MB  62.9MB  primary  fat16        lba
+ 2      64.0MB  8069MB  8005MB  primary
+
+(parted) <span class=typed>quit</span>
+</code></pre><p></TD></TR></TABLE><p>
+
+To summarize what we just did.  First we use the "mklabel" to create a fresh msdos style partition table on /dev/sda, you will have to answer "y" to the warning.  Next we create the partition to hold our FAT /boot filesystem, with a size of 64MB.   Next we tell parted to create another partition to hold our slash (/) filesystem starting at the 64MB mark, and ending at the last available sector of the disk (-1s).   We tell parted that these two partitions will be fat16 and ext4 respectively so it will set the correct partition type on each.<p>
+
+Finally we "print" the resulting partition table so we can see it, then exit with "quit"<p>
+
+The two partitions we just created are now available as devices /dev/sda1 and /dev/sda2.  Next we need to format them.  This is done with the mkfs.vfat and mkfs.ext4 commands:<p>
+
+<table><TR><TD bgcolor=darkblue><pre><code>
+root# <span class=typed>mkfs.vfat /dev/sda1</span>
+mkfs.vfat 3.0.13 (30 Jun 2012)
+
+root# <span class=typed>mkfs.ext4 -j /dev/sda2</span>
+mke2fs 1.42.5 (29-Jul-2012)
+Filesystem label=
+OS type: Linux
+Block size=4096 (log=2)
+Fragment size=4096 (log=2)
+Stride=0 blocks, Stripe width=0 blocks
+488640 inodes, 1954304 blocks
+97715 blocks (5.00%) reserved for the super user
+First data block=0
+Maximum filesystem blocks=2004877312
+60 block groups
+32768 blocks per group, 32768 fragments per group
+8144 inodes per group
+Superblock backups stored on blocks:
+        32768, 98304, 163840, 229376, 294912, 819200, 884736, 1605632
+
+Allocating group tables: done                          
+Writing inode tables: done                          
+Creating journal (32768 blocks): done
+Writing superblocks and filesystem accounting information: done
+</code></pre><p></TD></TR></TABLE>
+
+Excellent!  Now we need to mount these two partitions somewhere so we can copy data to it.  Let's make a temporary directory under /tmp/newpi and do all our work under it.  Below are the commands to mount our SD cards:<p>
+
+<table><TR><TD bgcolor=darkblue><pre><code>
+root# <span class=typed>mkdir /tmp/newpi</span>
+root# <span class=typed>mount /dev/sda2 /tmp/newpi</span>
+root# <span class=typed>mkdir /tmp/newpi/boot </span>
+root# <span class=typed>mount /dev/sda1 /tmp/newpi/boot</span>
+root# <span class=typed>df -h</span>
+Filesystem               Size  Used Avail Use% Mounted on
+rootfs                    15G  2.3G   12G  17% /
+/dev/root                 15G  2.3G   12G  17% /
+devtmpfs                 215M     0  215M   0% /dev
+tmpfs                     44M  248K   44M   1% /run
+tmpfs                    5.0M     0  5.0M   0% /run/lock
+tmpfs                     88M     0   88M   0% /run/shm
+/dev/mmcblk0p1            60M  9.4M   51M  16% /boot
+tmpfs                     10M     0   10M   0% /tmp
+<span class=highlight>/dev/sda2                7.3G   17M  6.9G   1%  /tmp/newpi
+/dev/sda1                 60M     0   60M   0% /tmp/newpi/boot</span>
+</code></pre></TD></TR></TABLE>
+<p>
+
+Nice!  The output of the "df" command will show us that both slash and boot have been mounted and are the expected sizes. In my case I am using a 8gb SD card.   Next, we will execute a command to copy our existing raspbian OS installed on our running pi into our mounted SD card.  Now, a couple notes about live cloning.  If you are running any services that keep data files open (like mysql, postgresql, apt-get, or other applications) these should be shutdown to insure you get a clean copy.  We will use the rsync utility for this copy, we will tell it to only copy / (slash) and /boot, further, we will also tell rsync not to cross filesystem boundaries (--one-file-system). 
+
+<p>
+Why do we specify slash (/) and boot separately?  If you look above at the df listing you can see lots of other filesystems mounted.  Some of these are ramdisks and virtual filesystems (/sys, /dev, /tmp, and /proc for instance).  We do not want to copy these at all.  By using the --one-file-system and specifying explicitly slash (/) and /boot, we only capture the OS tree of files.  ( Note, the rsync is sensitive to trailing slashes on the source and destination directory names, make sure you run it exactly as below)
+
+<table><TR><TD bgcolor=darkblue><pre><code>
+root# <span class=typed>rsync -av --one-file-system / /boot /tmp/newpi/</span>
+(lots and lots of files print out...)
+var/log/news/news.notice
+var/log/ntpstats/
+var/log/samba/
+var/mail/
+var/opt/
+var/spool/
+var/spool/rsyslog/
+var/tmp/
+var/www/
+
+sent 2204324795 bytes  received 1303348 bytes  2608667.23 bytes/sec
+total size is 2199215758  speedup is 1.00
+
+root# <span class=typed>df -h</span>
+Filesystem               Size  Used Avail Use% Mounted on
+rootfs                    15G  2.3G   12G  17% /
+/dev/root                 15G  2.3G   12G  17% /
+devtmpfs                 215M     0  215M   0% /dev
+tmpfs                     44M  248K   44M   1% /run
+tmpfs                    5.0M     0  5.0M   0% /run/lock
+tmpfs                     88M     0   88M   0% /run/shm
+/dev/mmcblk0p1            60M  9.4M   51M  16% /boot
+tmpfs                     10M     0   10M   0% /tmp
+<span class=highlight>/dev/sda2                7.3G  2.3G  4.6G  33% /tmp/newpi
+/dev/sda1                 60M  9.4M   51M  16% /tmp/newpi/boot</span>
+
+</code></pre><p></TD></TR></TABLE>
+
+Cool, after the copy completes, we run "df -h" again and can see that the destination slash mounted on /tmp/newpi matches in size our running system's slash, at about 2.3G.  So now, what else can we do?  Well the sky is the limit really.  We have a ready to roll raspbian SD card mounted and ready to customize!<p>
+
+<table><TR><TD bgcolor=darkblue><pre><code>
+Just a couple examples of things you can customize...<br>
+Change the hostname
+root# <span class=typed>vim /tmp/newpi/etc/hostname</span>
+</code></pre><p>
+<pre><code>
+(or without using an editor)
+root# <span class=typed>echo "mynewhostname" &gt; /tmp/newpi/etc/hostname</span>
+</code></pre><p>
+<pre><code>
+Change the network interface settings, or set a different static IP:
+
+root# <span class=typed>vim /tmp/newpi/etc/network/interfaces</span>
+</code></pre><p>
+
+Example: Wireless /w DHCP:
+<pre><code>
+auto lo
+
+iface lo inet loopback
+iface eth0 inet dhcp
+iface default inet dhcp
+
+auto wlan0
+allow-hotplug wlan0 eth0
+iface wlan0 inet dhcp
+        wpa-passphrase MY-WIRELESS-PASSPHRASE
+        wpa-ssid MY-WIRELESS-SSID
+</code></pre><p>
+
+
+Example: Wireless /w static IP:
+<pre><code>
+auto lo
+
+iface lo inet loopback
+iface eth0 inet dhcp
+iface default inet dhcp
+
+auto wlan0
+allow-hotplug wlan0 eth0
+iface wlan0 inet static
+        wpa-passphrase MY-WIRELESS-PASSPHRASE
+        wpa-ssid MY-WIRELESS-SSID
+        address 192.168.1.22
+        netmask 255.255.255.0
+        network 192.168.1.0
+        gateway 192.168.1.1
+</code></pre><p></TD></TR></TABLE><p>
+
+These are just a few examples.  When your ready to try out your cloned SD card, you should unmount it using the following commands.   Make sure you close any shells or change your current working directory (cd) off the new devices or you will get an error when you try to unmount.<p>
+
+<table><TR><TD bgcolor=darkblue><pre><code>
+root# <span class=typed>umount /tmp/newpi/boot</span>
+root# <span class=typed>umount /tmp/newpi</span>
+</code></pre></TD></TR></TABLE><p>
+
+You can now safely pull the SD card out and put it in your destination raspberry pi.  It should boot and work just like any other SD card.<p>
+<BR>
+<script async src="//pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- rpi-clone-embed2 -->
+<ins class="adsbygoogle"
+     style="display:inline-block;width:728px;height:90px"
+     data-ad-client="ca-pub-1453746380794860"
+     data-ad-slot="9978606430"></ins>
+<script>
+(adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<br>
+<h2>Sysmatt's Scripts</h2>
+
+Now that we have the basic concepts down, Let me show you some of my scripts to automate creating SD cards.   These scripts allow you to create and store backup copies of your running raspberry pi systems.  You can use this to construct a library of standard, tested, known good images.  Very useful when someone wants you to build them a copy of your next talking clock project!<p>
+
+We need to retrieve and install the scripts.  You will find a link at the end of this article to the current version of the scripts.  Download the latest tar archive and untar it into /usr/local/bin as shown below<p>
+
+Download the latest zip from <a href="http://github.com/sysmatt-industries/sysmatt-rpi-tools/">github</a><p>
+
+<table><TR><TD bgcolor=darkblue><pre><code>
+root# <span class=typed>cd /tmp</span>
+root# <span class=typed>wget -O sysmatt-rpi-tools.zip  https://github.com/sysmatt-industries/sysmatt-rpi-tools/archive/master.zip</span>
+</code></pre></TD></TR></TABLE><p>
+
+Install to /usr/local/bin or any other location you prefer
+
+<table><TR><TD bgcolor=darkblue><pre><code>
+root# <span class=typed>unzip sysmatt-rpi-tools.zip</span>
+root# <span class=typed>cd sysmatt-rpi-tools-master/</span>
+root# <span class=typed>chmod +x sysmatt.rpi.*</span>
+root# <span class=typed>mv sysmatt.rpi.* /usr/local/bin</span>
+</code></pre></TD></TR></TABLE><p>
+
+<h2>Making a backup archive</h2>
+
+In these scripts I just use a tar archive to store the image.  This makes them nicely portable and easy to modify.  The first script is used to create the backup copy of the running raspberry pi.  This script, "sysmatt.rpi.backup.gtar", by default creates it's backup file under the pi user's home directory with a default filename containing the hostname of the raspberry pi and the datestamp.  You can override this filename by specifying an alternate on the command line.  Below, I will run this script on the new pi we just cloned.<p>  If you so not have enough free disk space on your SD card to hold the tar archive you might want to write it to a flash drive or network mounted filesystem.  You should be fine if your SD card is 8gb or larger and have not downloaded too software/data.  <p>
+
+To write the tar archive to /home/pi/backups:
+<table><TR><TD bgcolor=darkblue><pre><code>
+root# <span class=typed>mkdir -p /home/pi/backups</span>
+root# <span class=typed>sysmatt.rpi.backup.gtar</span>
+(Lots and lots of files listed...)
+</code></pre></TD></TR></TABLE><p>
+
+Or, to specify an alternate location, run it with a filename argument:
+
+<table><TR><TD bgcolor=darkblue><pre><code>
+root# <span class=typed>sysmatt.rpi.backup.gtar /root/my.pi.backup.tar.gz</span>
+</code></pre></TD></TR></TABLE><p>
+
+Either of the above will result in a backup copy of the running system being stored in a tar archive file.  Again, a note of caution, if you have any programs that are actively writing to data files (mysql/postgresql/apt-get/etc) these should be not run while you make this clone so you get a clean copy.  <p>
+<BR>
+<script async src="//pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- rpi-clone-embed3 -->
+<ins class="adsbygoogle"
+     style="display:inline-block;width:728px;height:90px"
+     data-ad-client="ca-pub-1453746380794860"
+     data-ad-slot="2455339638"></ins>
+<script>
+(adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<BR>
+<h2>Restoring / Cloning</h2>
+
+The next script in the arsenal is a little more complicated.   It is called "sysmatt.rpi.restore.sd.card", it automates all the steps we did above with partitioning, creating filesystems, and copying the raspbian image (in the tar archive we just created).   This script will destroy everything on the destination SD card, so be careful!   First, we insert our destination SD card into a free USB port and discover what /dev/sd? device it has been assigned.  You should never assume without checking dmesg!<p>Tip:  This script will also work just fine on any Linux box, so you can create SD cards from a workstation also. <p>
+
+<table><TR><TD bgcolor=darkblue><pre><code>
+root# <span class=typed>dmesg</span>
+(removes lots of lines...)
+[ 6832.265765] scsi1 : usb-storage 1-1.2:1.0
+[ 6833.262698] scsi 1:0:0:0: Direct-Access     Single   Flash Reader     1.00 PQ: 0 ANSI: 0
+[ 6833.265306] sd 1:0:0:0: Attached scsi generic sg0 type 0
+[ 6833.772774] sd 1:0:0:0: [sda] 15644672 512-byte logical blocks: (8.01 GB/7.45 GiB)
+[ 6833.773480] sd 1:0:0:0: [sda] Write Protect is off
+[ 6833.773513] sd 1:0:0:0: [sda] Mode Sense: 03 00 00 00
+[ 6833.774183] sd 1:0:0:0: [sda] No Caching mode page found
+[ 6833.774211] sd 1:0:0:0: [sda] Assuming drive cache: write through
+[ 6833.777814] sd 1:0:0:0: [sda] No Caching mode page found
+[ 6833.777846] sd 1:0:0:0: [sda] Assuming drive cache: write through
+[ 6833.779191]  <span class=highlight>sda</span>: sda1 sda2
+[ 6833.785295] sd 1:0:0:0: [sda] No Caching mode page found
+[ 6833.785330] sd 1:0:0:0: [sda] Assuming drive cache: write through
+[ 6833.785360] sd 1:0:0:0: [sda] Attached SCSI removable disk
+</code></pre></TD></TR></TABLE><p>
+
+Ok, looks like this was assigned /dev/sda also.  Don't assume!<p>
+
+Now we run the sysmatt.rpi.restore.sd.card script passing the name of the SD device and the tar archive to restore from.  Note, your specific filename will be different.<p>
+
+<table><TR><TD bgcolor=darkblue><pre><code>
+root# <span class=typed>ls -l /home/pi/backups/pi.mynewhostname.20140804162905.backup.tar.gz</span>
+-rwxr-xr-x 1 root root 1431671079 Aug  4 17:49 /home/pi/backups/pi.mynewhostname.20140804162905.backup.tar.gz
+</code></pre></TD></TR></TABLE><p>
+Above listed is the tar archive we just created.   We will now restore it using the next script.  Note, it is interactive and will ask you for confirmation.  Before the script exits it will give you the opportunity to modify the resulting SD card before it unmounts it.
+
+<table><TR><TD bgcolor=darkblue><pre><code>
+root# <span class=typed>sysmatt.rpi.restore.sd.card /dev/sda /home/pi/backups/pi.mynewhostname.20140804162905.backup.tar.gz</span>
+=== /dev/sda Current Partition Table - To be destroyed! ===
+Model: Single Flash Reader (scsi)
+Disk /dev/sda: 8010MB
+Sector size (logical/physical): 512B/512B
+Partition Table: msdos
+
+Number  Start   End     Size    Type     File system  Flags
+ 1      1049kB  64.0MB  62.9MB  primary  fat16        lba
+ 2      64.0MB  8010MB  7946MB  primary  ext4
+
+
+PRESS <span class=typed>ENTER</span> to DESTROY /dev/sda, Press CTRL-c to abort
+
+Model: Single Flash Reader (scsi)
+Disk /dev/sda: 8010MB
+Sector size (logical/physical): 512B/512B
+Partition Table: msdos
+
+Number  Start   End     Size    Type     File system  Flags
+ 1      1049kB  64.0MB  62.9MB  primary  fat16        lba
+ 2      64.0MB  8010MB  7946MB  primary  ext4
+
+mkfs.vfat 3.0.13 (30 Jun 2012)
+mke2fs 1.42.5 (29-Jul-2012)
+Filesystem label=
+OS type: Linux
+Block size=4096 (log=2)
+Fragment size=4096 (log=2)
+Stride=0 blocks, Stripe width=0 blocks
+485760 inodes, 1939968 blocks
+96998 blocks (5.00%) reserved for the super user
+First data block=0
+Maximum filesystem blocks=1988100096
+60 block groups
+32768 blocks per group, 32768 fragments per group
+8096 inodes per group
+Superblock backups stored on blocks:
+        32768, 98304, 163840, 229376, 294912, 819200, 884736, 1605632
+
+Allocating group tables: done                          
+Writing inode tables: done                          
+Creating journal (32768 blocks): done
+Writing superblocks and filesystem accounting information: done
+
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/sda2       7.2G   17M  6.8G   1% /tmp/pi.sd.324943213
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/sda1        60M     0   60M   0% /tmp/pi.sd.324943213/boot
+
+Press <span class=typed>ENTER</span> To begin image restore
+
+(lots and lots of files listed here ...)
+
+boot/fixup_cd.dat
+boot/fixup_x.dat
+boot/kernel.img
+boot/start.elf
+boot/start_cd.elf
+boot/start_x.elf
+boot/issue.txt
+boot/LICENSE.oracle
+boot/kernel_emergency.img
+tar: boot: implausibly old time stamp 1970-01-01 00:00:00
+
+
+=DONE=
+The SD is mounted at: /tmp/pi.sd.324943213
+Now would be a good time to make modifications in another shell session...
+Press ENTER To unmount or CTRL-c to exit leaving mounted.
+</code></pre></TD></TR></TABLE><p>
+
+Now here, the script is paused waiting for input, and you have a choice.   If you wish to make changes to the SD card you can open another terminal and modify it under the mountpoint shown (/tmp/pi.sd.324943213 in this example), for instance, change the hostname like we did previously:<p>
+
+<table><TR><TD bgcolor=darkblue><pre><code>
+root# <span class=typed>echo "yetanotherpi" &gt; /tmp/pi.sd.324943213/etc/hostname</span>
+</code></pre></TD></TR></TABLE><p>
+
+When you are done with your modifications, you can return to the session running the script and hit enter.  It will unmount the SD card from it's temporary mountpoint.  Make sure you have closed any programs or shells that might be holding the filesystems open.   You can always try unmounting again with the "umount" command if necessary. <p>
+
+After it is unmounted, you can pull and insert it into your raspberry pi and boot it up.  If you want to make the script non-interactive, feel free to remove or comment out the "read" lines that ask for confirmation.  But do so at your own risk!<p>
+
+I hope you found this little tutorial helpful.  Using these utilities and scripts you can build your own library of standard OS images, preconfigured for particular applications.  This makes duplicating projects very easy and quick!    If you have feedback on the tutorial or any of the scripts please let me know at matthoskins @ gmail.com or on twitter @sysmatt.<p>
+
+<h2>About the author</h2>
+Matthew is the Senior Enterprise Architect at the New Jersey Institute of Technology (NJIT).  When he is not working, he enjoys hacking on electronics, microcontrollers and embedded systems.  He can also make a mean falafel when the circumstances call for it.  Matthew is a total nerd and thus completely useless in conversations regarding "sports".  Matthew also greatly dislikes talking about himself in the third person in author biographies.  For more random nonsense from Matthew he suggests following him on <a href="https://twitter.com/sysmatt">twitter: @sysmatt </a><p>
+
+Like this article?  See more of <a href="https://sites.google.com/site/sysmattpublishedworks/">Matt's published works</a>
+
+<h2>Resources:</h2>
+
+GitHub: <a href="https://github.com/sysmatt-industries/sysmatt-rpi-tools/">https://github.com/sysmatt-industries/sysmatt-rpi-tools/</a><p>
+Good article about the Raspberry Pi's bootstrap process: <a href="http://thekandyancode.wordpress.com/2013/09/21/how-the-raspberry-pi-boots-up/">http://thekandyancode.wordpress.com/2013/09/21/how-the-raspberry-pi-boots-up/</a>
+<BR>
+<script async src="//pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- rpi-clone-embed-footer -->
+<ins class="adsbygoogle"
+     style="display:inline-block;width:728px;height:90px"
+     data-ad-client="ca-pub-1453746380794860"
+     data-ad-slot="3932072839"></ins>
+<script>
+(adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+
+
+
+
+
+
+
+
+ 
+
+
+
+
+
+
