@@ -40,7 +40,10 @@ echo =DONE=
 echo "The SD is mounted at: ${MOUNTPOINT}"
 echo "Now would be a good time to make modifications in another shell session..."
 read -p "Press ENTER To unmount or CTRL-c to exit leaving mounted."
-set +x
+echo ""
+echo "Working. This may take a moment..."
+echo ""
+set -x
 umount "${MOUNTPOINT}/boot"
 umount "${MOUNTPOINT}"
 
