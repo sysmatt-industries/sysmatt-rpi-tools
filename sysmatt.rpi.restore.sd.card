@@ -36,12 +36,17 @@ read -p "Press ENTER To begin image restore"
 tar -xvzf  "${PI_BACKUP_SLASH}" -C "${MOUNTPOINT}"
 
 # Begin NOOBS fixup / Recommended by @KevinSidwar / 20140829-1744-MEH
-ORIG_SLASHDEV=`cat "${MOUNTPOINT}/etc/fstab"| grep " / "     |grep -v "^#" |awk '{ print $1; }' |cut -d/ -f3`
-ORIG_BOOTDEV=`cat  "${MOUNTPOINT}/etc/fstab"| grep " /boot " |grep -v "^#" |awk '{ print $1; }' |cut -d/ -f3`
+ORIG_SLASHDEV_FOUND=`cat "${MOUNTPOINT}/etc/fstab"| grep " / "     |grep -v "^#" |awk '{ print $1; }' |cut -d/ -f3`
+ORIG_BOOTDEV_FOUND=`cat  "${MOUNTPOINT}/etc/fstab"| grep " /boot " |grep -v "^#" |awk '{ print $1; }' |cut -d/ -f3`
 
 # Hardcoded
 NEW_SLASHDEV="mmcblk0p2"
 NEW_BOOTDEV="mmcblk0p1"
+
+# Defaults just in case the above search of fstab is a miss
+ORIG_SLASHDEV="${ORIG_SLASHDEV_FOUND:-$NEW_SLASHDEV}"
+ORIG_BOOTDEV="${ORIG_BOOTDEV_FOUND:-$NEW_BOOTDEV}"
+
 
 echo "ORIG_SLASHDEV[${ORIG_SLASHDEV}] NEW_SLASHDEV[${NEW_SLASHDEV}] ORIG_BOOTDEV[${ORIG_BOOTDEV}] NEW_BOOTDEV[${NEW_BOOTDEV}]"
 
