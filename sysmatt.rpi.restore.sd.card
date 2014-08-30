@@ -34,6 +34,57 @@ df -h "${MOUNTPOINT}"
 df -h "${MOUNTPOINT}/boot"
 read -p "Press ENTER To begin image restore"
 tar -xvzf  "${PI_BACKUP_SLASH}" -C "${MOUNTPOINT}"
+
+# Begin NOOBS fixup / Recommended by @KevinSidwar / 20140829-1744-MEH
+ORIG_SLASHDEV=`cat "${MOUNTPOINT}/etc/fstab"| grep " / "     |grep -v "^#" |awk '{ print $1; }' |cut -d/ -f3`
+ORIG_BOOTDEV=`cat  "${MOUNTPOINT}/etc/fstab"| grep " /boot " |grep -v "^#" |awk '{ print $1; }' |cut -d/ -f3`
+
+# Hardcoded
+NEW_SLASHDEV="mmcblk0p2"
+NEW_BOOTDEV="mmcblk0p1"
+
+echo "ORIG_SLASHDEV[${ORIG_SLASHDEV}] NEW_SLASHDEV[${NEW_SLASHDEV}] ORIG_BOOTDEV[${ORIG_BOOTDEV}] NEW_BOOTDEV[${NEW_BOOTDEV}]"
+
+FILE_FSTAB="${MOUNTPOINT}/etc/fstab"
+FILE_CMDLINE="${MOUNTPOINT}/boot/cmdline.txt"
+FILE_OS_CONFIG_JSON="${MOUNTPOINT}/boot/os_config.json"
+
+if [  "${ORIG_SLASHDEV}" != "${NEW_SLASHDEV}"  -o   "${ORIG_BOOTDEV}" != "${NEW_BOOTDEV}"  ]
+then
+	echo "CONFIGURATION CONVERSION NECESSARY - Devices do not match, modifying files. "
+
+	THISFILE="${FILE_FSTAB}"
+	if [ -e "${THISFILE}" ] 
+	then
+		echo "Fixing ${THISFILE}"
+		cp -f "${THISFILE}" "${THISFILE}.old"
+		cat "${THISFILE}.old" |sed -e "s#${ORIG_SLASHDEV}#%NEW_SLASHDEV%# ; s#${ORIG_BOOTDEV}#%NEW_BOOTDEV%#"  > "${THISFILE}.i"
+		cat "${THISFILE}.i"   |sed -e "s#%NEW_SLASHDEV%#${NEW_SLASHDEV}# ; s#%NEW_BOOTDEV%#${NEW_BOOTDEV}#"    >"${THISFILE}"
+		rm -f "${THISFILE}.i"
+	fi
+
+	THISFILE="${FILE_CMDLINE}"
+	if [ -e "${THISFILE}" ] 
+	then
+		echo "Fixing ${THISFILE}"
+		cp -f "${THISFILE}" "${THISFILE}.old"
+		cat "${THISFILE}.old" |sed -e "s#${ORIG_SLASHDEV}#%NEW_SLASHDEV%# ; s#${ORIG_BOOTDEV}#%NEW_BOOTDEV%#"  > "${THISFILE}.i"
+		cat "${THISFILE}.i"   |sed -e "s#%NEW_SLASHDEV%#${NEW_SLASHDEV}# ; s#%NEW_BOOTDEV%#${NEW_BOOTDEV}#"    >"${THISFILE}"
+		rm -f "${THISFILE}.i"
+	fi
+
+	THISFILE="${FILE_OS_CONFIG_JSON}"
+	if [ -e "${THISFILE}" ] 
+	then
+		echo "Fixing ${THISFILE}"
+		cp -f "${THISFILE}" "${THISFILE}.old"
+		cat "${THISFILE}.old" |sed -e "s#${ORIG_SLASHDEV}#%NEW_SLASHDEV%# ; s#${ORIG_BOOTDEV}#%NEW_BOOTDEV%#"  > "${THISFILE}.i"
+		cat "${THISFILE}.i"   |sed -e "s#%NEW_SLASHDEV%#${NEW_SLASHDEV}# ; s#%NEW_BOOTDEV%#${NEW_BOOTDEV}#"    >"${THISFILE}"
+		rm -f "${THISFILE}.i"
+	fi
+
+fi
+# End Noobs fixup
 echo ""
 echo ""
 echo =DONE=
