@@ -33,7 +33,7 @@ parted --script "${SDCARD_DEVICE}"  "mkpart primary fat16 1MiB 64MB"
 parted --script "${SDCARD_DEVICE}"  "mkpart primary ext4 64MB -1s"
 parted --script "${SDCARD_DEVICE}"  print
 mkfs.vfat  "${SDCARD_DEVICE}1"
-mkfs.ext4 -j "${SDCARD_DEVICE}2" 
+mkfs.ext4 -F -j "${SDCARD_DEVICE}2" 
 mkdir -p "${MOUNTPOINT}"
 mount "${SDCARD_DEVICE}2" "${MOUNTPOINT}"
 mkdir -p "${MOUNTPOINT}/boot"
@@ -44,12 +44,12 @@ read -p "Press ENTER To begin image restore"
 tar $@ -xvzf  "${PI_BACKUP_SLASH}" -C "${MOUNTPOINT}"
 
 # Begin NOOBS fixup / Recommended by @KevinSidwar / 20140829-1744-MEH
-ORIG_SLASHDEV_FOUND=`cat "${MOUNTPOINT}/etc/fstab"| grep " / "     |grep -v "^#" |awk '{ print $1; }' |cut -d/ -f3`
-ORIG_BOOTDEV_FOUND=`cat  "${MOUNTPOINT}/etc/fstab"| grep " /boot " |grep -v "^#" |awk '{ print $1; }' |cut -d/ -f3`
+ORIG_SLASHDEV_FOUND=`cat "${MOUNTPOINT}/etc/fstab"| grep " / "     |grep -v "^#" |awk '{ print $1; }'`
+ORIG_BOOTDEV_FOUND=`cat  "${MOUNTPOINT}/etc/fstab"| grep " /boot " |grep -v "^#" |awk '{ print $1; }'`
 
 # Hardcoded
-NEW_SLASHDEV="mmcblk0p2"
-NEW_BOOTDEV="mmcblk0p1"
+NEW_SLASHDEV="/dev/mmcblk0p2"
+NEW_BOOTDEV="/dev/mmcblk0p1"
 
 # Defaults just in case the above search of fstab is a miss
 ORIG_SLASHDEV="${ORIG_SLASHDEV_FOUND:-$NEW_SLASHDEV}"
