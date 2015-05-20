@@ -3,6 +3,14 @@
 
 SDCARD_DEVICE="${1:?You must specify one SD CARD DEVICE to destroy}"
 PI_BACKUP_SLASH="${2:?You must specify one PI BACKUP SLASH GTAR file}"
+shift; shift;
+# Any remaining args are added to TAR command line
+
+# Extra operations which can be done in ENV Vars
+# PI_OVERWRITE_ETC_HOSTNAME="new-hostname"
+# PI_OPENVPN_CONFIG_FILE="/some/source/client.conf"
+
+
 
 # Temp random mountpoint under /tmp
 MOUNTPOINT="/tmp/pi.sd.${RANDOM}${$}"
@@ -33,7 +41,7 @@ mount "${SDCARD_DEVICE}1" "${MOUNTPOINT}/boot"
 df -h "${MOUNTPOINT}"
 df -h "${MOUNTPOINT}/boot"
 read -p "Press ENTER To begin image restore"
-tar -xvzf  "${PI_BACKUP_SLASH}" -C "${MOUNTPOINT}"
+tar $@ -xvzf  "${PI_BACKUP_SLASH}" -C "${MOUNTPOINT}"
 
 # Begin NOOBS fixup / Recommended by @KevinSidwar / 20140829-1744-MEH
 ORIG_SLASHDEV_FOUND=`cat "${MOUNTPOINT}/etc/fstab"| grep " / "     |grep -v "^#" |awk '{ print $1; }' |cut -d/ -f3`
@@ -90,6 +98,20 @@ then
 
 fi
 # End Noobs fixup
+if [ -n "${PI_OVERWRITE_ETC_HOSTNAME}" ] 
+then
+	# Write a new /etc/hostname
+	echo "Writing new /etc/hostname with [${PI_OVERWRITE_ETC_HOSTNAME}] to ${MOUNTPOINT}/etc/hostname"
+	echo "${PI_OVERWRITE_ETC_HOSTNAME}" > "${MOUNTPOINT}/etc/hostname"
+fi
+
+if [ -e "${PI_OPENVPN_CONFIG_FILE}" ] 
+then
+	echo "Writing OpenVPN config [${PI_OPENVPN_CONFIG_FILE}] to ${MOUNTPOINT}/etc/openvpn/"
+	rm -f ${MOUNTPOINT}/etc/openvpn/*.conf
+	cp -f "${PI_OPENVPN_CONFIG_FILE}" "${MOUNTPOINT}/etc/openvpn/"
+fi
+
 echo ""
 echo ""
 echo =DONE=
